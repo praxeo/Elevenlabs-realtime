@@ -1,0 +1,7 @@
+name = "scribe-realtime-dictation"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Shared mode (optional): set both secrets and users only need the passphrase.
+#   npx wrangler secret put ELEVENLABS_API_KEY
+#   npx wrangler secret put APP_PASSPHRASE

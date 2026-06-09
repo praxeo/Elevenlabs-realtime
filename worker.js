@@ -20,6 +20,28 @@ export default {
       );
     }
 
+    if (url.pathname === "/manifest.webmanifest") {
+      return new Response(JSON.stringify(MANIFEST), {
+        headers: {
+          "content-type": "application/manifest+json",
+          "cache-control": "public, max-age=3600",
+        },
+      });
+    }
+
+    if (url.pathname === "/icon-192.png" || url.pathname === "/icon-512.png") {
+      const b64 = url.pathname === "/icon-192.png" ? ICON_192_B64 : ICON_512_B64;
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return new Response(bytes, {
+        headers: {
+          "content-type": "image/png",
+          "cache-control": "public, max-age=86400",
+        },
+      });
+    }
+
     if (url.pathname === "/favicon.ico") {
       return new Response(null, { status: 204 });
     }
@@ -169,11 +191,37 @@ function safeEqual(a, b) {
   return out === 0;
 }
 
+// Web app manifest so the page is installable as a standalone app
+// (Chrome/Edge: address-bar install icon, or menu -> "Install app").
+const MANIFEST = {
+  name: "Scribe Realtime Dictation",
+  short_name: "Dictation",
+  description: "Push-to-talk realtime medical dictation via ElevenLabs Scribe v2",
+  start_url: "/",
+  display: "standalone",
+  background_color: "#0b0d10",
+  theme_color: "#0b0d10",
+  icons: [
+    { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+  ],
+};
+
+const ICON_192_B64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAMAAAADACAYAAABS3GwHAAAEb0lEQVR42u3dPVIbURRE4ZlXLME5iSMiSB2xJhbiNRGRQkREQs4ecILKKkpiZjT/r78T2VUGiVGf1/dKMmqbFbm5u/9sEM/r82O71m23wo5kKdo1Q//+9uKRRnP9+3Y1Gdqlgi/sGCvFHCK0go9kEdo5gi/0WEKGKURopwy/4GNpEcZKUIQfe+M4a2OfXWwFH8ltUIQfyW1QhB/JEhThR7IERfiRLEERfiRLUC75xsBeJBglwMEg4cdeJehqgSL8SJagdM39QA2cy3Qx9yN5HyhGHySPQsXlQTLF6Y/kFtAA0AA/bclAbRxnvQzdmoG9j0FGIOBYAMsvUpdhDQANABAAIACQRWsBRiKHX6eiAWAEAggAEADI4solWJaHp4/Of/P3zy8XigA5ge/6GkIQICL4Xd+LCASICj4RLMHCv+LtEACbDSUJjECRwTcSaQDh1wYEAAjg1NUCBBA2EhBAyEhAAIAATlctQACAANGnqhYgAEAAgAAAAfLmaXsAAQACAAQACAAQACAAQAAQwCUAAQACAAQACAAQACAAQACAAAABAAIABAAIABAAIABAAIAAAAEAAgAEqIK9fg6vzw8mAEAAgAAAAXLmafM/AQACJJ6qTn8CAARIPF2d/gSIDZnwEyA2bMJPAIAAiaeu0/9yrlyCacK3xmfyCr4GiG0D4SdArATCbwSKHIkEnwCRIgg+AaoZi/oIIfAEsCfAEgwQACAAQADAEjwVx8/GpC6mrkGYAOeegnx4+ogLwPdrcfh72nW4Sg09tELEDtD3QUwSxaFgCQZyBNACw3/GlF1AA0ADaIGMFnD6a4BYCSy+BBh0stUUmCE/S9rrABqgcgmc/ASIPuFcGwKMHoX2eIoOvd+pB0PsCDT0Ad+TBEPva3Ir2gEqk8DMT4BZT74tB+yS+5a+E8U3wKUSbEmES++PJwQIMCoIa4sw5vaFnwCTBWJpEcbenvD/x+8F+haMMcGa8z+TTCWY8BNgVgnOBXYLT7sKPwEGBWXKEK65Kwi+HSA2OMKvATbXBoKvAZyk7qsG0AaCTwAiCD4B9j8WLS2D0BMgTgahJ8Bul1Dv0d8mngVaUIq+oRZ+AgAEAAgAEAAgAEAAgAAAAQACAAQACAAQABiGd4N+sbVfdbgE3nSnAUAAgAAAAQACAAQACAAQAKgZL4R94UUhDQAQAIgS4PX5sW2aprn+fetqIIJD1l+fH1sNACMQQACAAECgABZhJC7AGgAa4JwhQK2n/0kBDpUA1M5x1o1AMAJ9N8MYhNqXXw0AnBJACyDl9O9sABKglvD3boBzpgB75lymS9cXaAHUOPr0GoFIgJrD3ymAfQA1zv2DBDg2iATYU/j77LK9GoAEqDH8g0YgEqC28A8SgASoLfyDBSABagp/0zTNqBe8bu7uPw9/fn978WhgN8G/uAG0AWoJ/+gGONUE2gBLBH+K8E8mwDkRyICpQz9V8GcRgAjYS/BnFeAnEUiBPmGfO/iLCDBEBmCp0K8iACmwdthP8Q9NZS5TPi79vAAAAABJRU5ErkJggg==";
+
+const ICON_512_B64 =
+  "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";
+
 const INDEX_HTML = `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0b0d10" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
   <title>ElevenLabs Scribe v2 Dictation</title>
   <style>
     :root {
@@ -249,11 +297,16 @@ const INDEX_HTML = `<!doctype html>
     #meterBar { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: var(--ok); }
     #openMark  { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); left: 0%; }
     #closeMark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--warn);   left: 0%; }
-    #gateState {
+    .pill {
       display: inline-block; margin-left: 8px; font-size: 12px; padding: 1px 8px;
       border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
     }
-    #gateState.open { color: #0b0d10; background: var(--ok); border-color: var(--ok); }
+    .pill.open { color: #0b0d10; background: var(--ok); border-color: var(--ok); }
+    .pill.ok   { color: var(--ok); border-color: var(--ok); }
+    .pill.live { color: #0b0d10; background: var(--accent); border-color: var(--accent); }
+    .pill.rec  { color: #fff; background: #b91c1c; border-color: #b91c1c; }
+    .pill.fail { color: #fff; background: var(--danger); border-color: var(--danger); }
+    .pill.warn { color: #0b0d10; background: var(--warn); border-color: var(--warn); }
     .sliderval { color: var(--accent); font-size: 12px; }
     .legend { font-size: 11px; color: var(--muted); margin-top: 4px; }
     .legend .dr { color: var(--danger); }
@@ -316,61 +369,16 @@ const INDEX_HTML = `<!doctype html>
 
       <div class="divider"></div>
 
-      <!-- Live Local Audio Routing Filters -->
-      <label>Local Mic Level <span id="gateState">closed</span></label>
+      <label>Mic level
+        <span id="micPill" class="pill">mic off</span>
+        <span id="linkPill" class="pill">link idle</span>
+        <span id="gateState" class="pill" title="Local noise gate state (affects the saved audio preview only)">closed</span>
+      </label>
       <div class="meterwrap">
         <div id="meterBar"></div>
         <div id="closeMark"></div>
         <div id="openMark"></div>
       </div>
-      <div class="legend" style="margin-bottom: 12px;">
-        <span class="dr">red = OPEN threshold</span> &nbsp;|&nbsp;
-        <span class="dy">yellow = CLOSE threshold</span>
-      </div>
-
-      <label for="gateOpen">Gate open threshold <span class="sliderval" id="gateOpenVal"></span></label>
-      <input id="gateOpen" type="range" min="0" max="0.12" step="0.001" value="0.030" />
-
-      <label for="gateClose">Gate close threshold <span class="sliderval" id="gateCloseVal"></span></label>
-      <input id="gateClose" type="range" min="0" max="0.12" step="0.001" value="0.008" />
-
-      <label for="highpass">High‑pass filter <span class="sliderval" id="highpassVal"></span></label>
-      <input id="highpass" type="range" min="0" max="200" step="5" value="85" />
-
-      <div class="divider"></div>
-
-      <!-- Scribe VAD Performance Parameters -->
-      <label style="font-weight: bold; color: var(--accent);">Scribe Realtime Filters</label>
-
-      <label for="vadSilence">Scribe pause limit <span class="sliderval" id="vadSilenceVal"></span></label>
-      <input id="vadSilence" type="range" min="0.3" max="3.0" step="0.1" value="2.0" />
-
-      <label for="vadThreshold">Scribe noise filter <span class="sliderval" id="vadThresholdVal"></span></label>
-      <input id="vadThreshold" type="range" min="0.1" max="0.9" step="0.05" value="0.55" />
-
-      <label for="minSpeech">Scribe click filter <span class="sliderval" id="minSpeechVal"></span></label>
-      <input id="minSpeech" type="range" min="50" max="1000" step="50" value="150" />
-
-      <div class="divider"></div>
-
-      <label class="checkbox">
-        <input type="checkbox" id="noiseSuppress" />
-        Browser noise suppression
-      </label>
-
-      <details class="help">
-        <summary>How do these filter settings work? (tap to learn)</summary>
-        <div class="body">
-          <p><strong>Local Gate Controls:</strong> This acts on the audio before it gets saved into your local browser playback playbar.</p>
-          <p><strong>Scribe Realtime Filters:</strong> Direct parameters piped to ElevenLabs' AI:
-             <ul>
-               <li><strong>Pause limit</strong>: Higher value (e.g. 2.0s) waits longer before finalizing. This reduces jumps ("less fast") and gives the AI context to correct grammar/spellings.</li>
-               <li><strong>Noise filter</strong>: Higher values ignore quiet room hums, whispers, and background chatter.</li>
-               <li><strong>Click filter</strong>: Higher values prevent brief clicks/rustling from being processed as speech.</li>
-             </ul>
-          </p>
-        </div>
-      </details>
 
       <div class="status" id="status">
         CapsLock via AHK: hold to record, release to stop. Browser beeps when text is
@@ -389,12 +397,6 @@ right lower quadrant"></textarea>
         <strong>Keyterms add ~20 % to cost.</strong> 0 / 50 terms.
       </div>
 
-      <label for="timestamps">Timestamps</label>
-      <select id="timestamps">
-        <option value="none" selected>none</option>
-        <option value="word">word</option>
-      </select>
-
       <label class="checkbox">
         <input type="checkbox" id="noVerbatim" checked />
         Remove filler words / false starts
@@ -410,6 +412,12 @@ right lower quadrant"></textarea>
         Append consecutive recordings (don't clear)
       </label>
 
+      <div class="row" id="appendWindowRow" style="margin: 4px 0 0 24px; align-items: center;">
+        <span class="hint" style="flex: 0 0 auto;">…only if started within</span>
+        <input id="appendWindow" type="number" min="0" max="600" step="5" value="45" style="flex: 0 0 80px;" />
+        <span class="hint" style="flex: 0 0 auto;">seconds (0 = always append)</span>
+      </div>
+
       <label class="checkbox">
         <input type="checkbox" id="stripNewlines" checked />
         Strip newlines (collapse to spaces)
@@ -422,8 +430,57 @@ right lower quadrant"></textarea>
 
       <label class="checkbox">
         <input type="checkbox" id="startBeep" checked />
-        Beep when recording starts
+        Start/done beeps (failure alarms always play)
       </label>
+
+      <details class="help" id="advanced">
+        <summary>Advanced audio &amp; noise settings</summary>
+        <div class="body">
+          <div class="legend">
+            <span class="dr">red mark on meter = gate OPEN threshold</span> &nbsp;|&nbsp;
+            <span class="dy">yellow = CLOSE threshold</span>
+          </div>
+
+          <label for="gateOpen">Gate open threshold <span class="sliderval" id="gateOpenVal"></span></label>
+          <input id="gateOpen" type="range" min="0" max="0.12" step="0.001" value="0.030" />
+
+          <label for="gateClose">Gate close threshold <span class="sliderval" id="gateCloseVal"></span></label>
+          <input id="gateClose" type="range" min="0" max="0.12" step="0.001" value="0.008" />
+
+          <label for="highpass">High‑pass filter <span class="sliderval" id="highpassVal"></span></label>
+          <input id="highpass" type="range" min="0" max="200" step="5" value="85" />
+
+          <div class="divider"></div>
+
+          <label style="font-weight: bold; color: var(--accent);">Scribe Realtime Filters</label>
+
+          <label for="vadSilence">Scribe pause limit <span class="sliderval" id="vadSilenceVal"></span></label>
+          <input id="vadSilence" type="range" min="0.3" max="3.0" step="0.1" value="2.0" />
+
+          <label for="vadThreshold">Scribe noise filter <span class="sliderval" id="vadThresholdVal"></span></label>
+          <input id="vadThreshold" type="range" min="0.1" max="0.9" step="0.05" value="0.55" />
+
+          <label for="minSpeech">Scribe click filter <span class="sliderval" id="minSpeechVal"></span></label>
+          <input id="minSpeech" type="range" min="50" max="1000" step="50" value="150" />
+
+          <label class="checkbox">
+            <input type="checkbox" id="noiseSuppress" />
+            Browser noise suppression
+          </label>
+
+          <label for="timestamps">Timestamps</label>
+          <select id="timestamps">
+            <option value="none" selected>none</option>
+            <option value="word">word</option>
+          </select>
+
+          <h3>How do these settings work?</h3>
+          <p><strong>Local gate</strong>: shapes only the locally saved audio preview — the realtime feed to Scribe is not gated. Use the Scribe filters to reject background speech.</p>
+          <p><strong>Pause limit</strong>: higher (e.g. 2.0s) waits longer before finalizing a segment, giving the AI more context to fix grammar/spelling.</p>
+          <p><strong>Noise filter</strong>: higher values ignore quiet hums, whispers, and background chatter.</p>
+          <p><strong>Click filter</strong>: higher values stop brief clicks/rustling being read as speech.</p>
+        </div>
+      </details>
 
       <label>Notes</label>
       <div class="hint">
@@ -435,6 +492,7 @@ right lower quadrant"></textarea>
     <section class="card">
       <div class="row">
         <button id="copyBtn">Copy latest</button>
+        <button id="freshBtn" title="Clear the current text so the next dictation starts a new note (history is kept)">Start fresh</button>
         <button id="downloadBtn">Download .txt</button>
       </div>
 
@@ -445,7 +503,7 @@ right lower quadrant"></textarea>
         <button id="downloadAudioBtn">Download audio</button>
       </div>
 
-      <label>Latest transcript</label>
+      <label>Latest transcript <span id="appendChip" class="pill" style="display:none;"></span></label>
       <div id="latest" class="big"></div>
 
       <div class="row" style="margin-top:14px;">
@@ -470,6 +528,7 @@ right lower quadrant"></textarea>
   const recordBtn        = document.getElementById("recordBtn");
   const clearBtn         = document.getElementById("clearBtn");
   const copyBtn          = document.getElementById("copyBtn");
+  const freshBtn         = document.getElementById("freshBtn");
   const downloadBtn      = document.getElementById("downloadBtn");
   const downloadAudioBtn = document.getElementById("downloadAudioBtn");
   const toggleHistoryBtn = document.getElementById("toggleHistoryBtn");
@@ -510,6 +569,12 @@ right lower quadrant"></textarea>
   const closeMark        = document.getElementById("closeMark");
   const gateStateEl      = document.getElementById("gateState");
 
+  const appendWindowEl   = document.getElementById("appendWindow");
+  const appendChipEl     = document.getElementById("appendChip");
+  const micPillEl        = document.getElementById("micPill");
+  const linkPillEl       = document.getElementById("linkPill");
+  const advancedEl       = document.getElementById("advanced");
+
   let mediaRecorder = null;
   let chunks = [];
   let recording = false;
@@ -523,6 +588,28 @@ right lower quadrant"></textarea>
   let ws = null;
   let finalizedSegments = [];
   let currentPartial = "";
+
+  // Per-session flow state
+  let sessionSeq = 0;          // bumps each recording; stale socket callbacks bail out
+  let sessionFinalized = true;
+  let userStopped = false;     // distinguishes clean PTT-release from unexpected disconnect
+  let stopPhase = null;        // null | "tail" | "awaitFinal"
+  let pendingStart = false;    // F13 pressed while previous session was finalizing
+  let pendingChunks = [];      // audio captured while the WebSocket is still connecting
+  let lastWsError = "";
+  let wsOpenAt = 0;
+  let recStartedAt = 0;
+  let partialCount = 0;
+  let speechDetected = false;
+  let maxRmsSeen = 0;
+  let micAlarmFired = false;
+  let sttAlarmFired = false;
+  let mutedSince = 0;
+  let lastFinalizeAt = 0;
+  let connectTimer = null;
+  let tailTimer = null;
+  let finalDeadlineTimer = null;
+  let quietTimer = null;
 
   // Persistent audio nodes
   let stream = null;
@@ -545,15 +632,26 @@ right lower quadrant"></textarea>
   const HOLD_SECONDS = 0.9;
   const DICTATION_SENTINEL = "##DICTATION_FAILED##";
 
+  const CONNECT_TIMEOUT_MS = 5000;  // WebSocket must open within this or the dictation fails loudly
+  const TAIL_MS            = 600;   // keep streaming audio this long after PTT release (anti-clipping)
+  const FINAL_WAIT_MS      = 2500;  // max wait for the final committed transcript after commit
+  const COMMIT_QUIET_MS    = 350;   // close this soon after the last committed transcript arrives
+  const PENDING_CHUNK_CAP  = 400;   // ~35s of audio buffered while the socket connects
+  const FLATLINE_RMS       = 0.0008; // below this for the whole session = mic is almost certainly dead
+
   const STORE_KEY              = "scribe_v2_transcripts_v9";
   const SETTINGS_KEY           = "scribe_v2_settings_v9";
   const API_KEY_STORAGE_KEY    = "elevenlabs_api_key_browser_v9";
   const PASSPHRASE_STORAGE_KEY = "scribe_v2_passphrase_v9";
 
-  /* ───── Audio cues ───── */
+  /* ───── Audio cues ─────
+     Beeps prefer the persistent (already running) AudioContext: a fresh
+     AudioContext created while the tab is in the background often starts
+     suspended and never sounds — exactly when you most need the cue. */
   function beep(freq, ms, when) {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const reuse = audioCtx && audioCtx.state === "running";
+      const ctx = reuse ? audioCtx : new (window.AudioContext || window.webkitAudioContext)();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.frequency.value = freq;
@@ -563,13 +661,16 @@ right lower quadrant"></textarea>
       const t0 = ctx.currentTime + (when || 0);
       osc.start(t0);
       osc.stop(t0 + ms / 1000);
-      setTimeout(() => ctx.close(), ((when || 0) + ms / 1000) * 1000 + 60);
+      if (!reuse) setTimeout(() => ctx.close(), ((when || 0) + ms / 1000) * 1000 + 60);
     } catch (e) {}
   }
 
+  // Start/done cues respect the checkbox; failure sounds always play.
   function startBeep() { if (startBeepEl.checked) beep(760, 130); }
   function doneBeep()  { if (startBeepEl.checked) { beep(1046, 90, 0); beep(1568, 130, 0.10); } }
-  function failBeep()  { if (startBeepEl.checked) beep(300, 280); }
+  function failBeep()  { beep(300, 280); }
+  function micAlarmBeep() { beep(330, 170, 0); beep(280, 170, 0.22); beep(240, 260, 0.44); }
+  function sttWarnBeep()  { beep(520, 140, 0); beep(520, 140, 0.20); }
 
   /* ───── Audio Downsampling & Float conversion helpers ───── */
   function downsampleBuffer(buffer, inputSampleRate, outputSampleRate) {
@@ -636,6 +737,45 @@ right lower quadrant"></textarea>
     statusEl.textContent = msg;
   }
 
+  function setMicPill(state) {
+    // state: "off" | "ready" | "rec" | "fail"
+    if (state === "rec")        { micPillEl.textContent = "REC";       micPillEl.className = "pill rec"; }
+    else if (state === "ready") { micPillEl.textContent = "mic ready"; micPillEl.className = "pill ok"; }
+    else if (state === "fail")  { micPillEl.textContent = "MIC FAIL";  micPillEl.className = "pill fail"; }
+    else                        { micPillEl.textContent = "mic off";   micPillEl.className = "pill"; }
+  }
+
+  function setLinkPill(state) {
+    // state: "idle" | "connecting" | "live" | "fail"
+    if (state === "live")            { linkPillEl.textContent = "LIVE";        linkPillEl.className = "pill live"; }
+    else if (state === "connecting") { linkPillEl.textContent = "connecting…"; linkPillEl.className = "pill warn"; }
+    else if (state === "fail")       { linkPillEl.textContent = "LINK FAIL";   linkPillEl.className = "pill fail"; }
+    else                             { linkPillEl.textContent = "link idle";   linkPillEl.className = "pill"; }
+  }
+
+  function updateAppendChip() {
+    const hasText = latestText && latestText.trim();
+    if (!appendModeEl.checked || !hasText || recording) {
+      appendChipEl.style.display = "none";
+      return;
+    }
+    appendChipEl.style.display = "";
+    const w = Number(appendWindowEl.value) || 0;
+    if (w > 0 && lastFinalizeAt) {
+      const remain = Math.ceil((lastFinalizeAt + w * 1000 - Date.now()) / 1000);
+      if (remain <= 0) {
+        appendChipEl.textContent = "next dictation starts fresh";
+        appendChipEl.className = "pill";
+      } else {
+        appendChipEl.textContent = "next dictation appends (" + remain + "s)";
+        appendChipEl.className = "pill ok";
+      }
+    } else {
+      appendChipEl.textContent = "next dictation appends";
+      appendChipEl.className = "pill ok";
+    }
+  }
+
   function parseKeyterms(raw) {
     return raw
       .split(/[\\r\\n]+/)
@@ -679,7 +819,7 @@ right lower quadrant"></textarea>
 
   function setGateStateUI(isOpen) {
     gateStateEl.textContent = isOpen ? "OPEN" : "closed";
-    gateStateEl.className  = isOpen ? "open" : "";
+    gateStateEl.className  = isOpen ? "pill open" : "pill";
   }
 
   /* ───── Storage / Persistence ───── */
@@ -707,6 +847,8 @@ right lower quadrant"></textarea>
       vadSilence:     vadSilenceEl.value,
       vadThreshold:   vadThresholdEl.value,
       minSpeech:      minSpeechEl.value,
+      appendWindow:   appendWindowEl.value,
+      advancedOpen:   Boolean(advancedEl && advancedEl.open),
       historyVisible: historyVisible,
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
@@ -741,6 +883,8 @@ right lower quadrant"></textarea>
       if (s.vadSilence !== undefined) vadSilenceEl.value = s.vadSilence;
       if (s.vadThreshold !== undefined) vadThresholdEl.value = s.vadThreshold;
       if (s.minSpeech !== undefined) minSpeechEl.value = s.minSpeech;
+      if (s.appendWindow !== undefined) appendWindowEl.value = s.appendWindow;
+      if (typeof s.advancedOpen === "boolean" && advancedEl) advancedEl.open = s.advancedOpen;
       if (typeof s.historyVisible === "boolean") historyVisible = s.historyVisible;
 
       if (saveApiKeyEl.checked) {
@@ -854,13 +998,29 @@ right lower quadrant"></textarea>
   }
 
   /* ───── Real-time Audio Graph (mic → highpass → gate → script processor) ───── */
+  function audioGraphHealthy() {
+    // A stale graph (e.g. restored from bfcache, device unplugged, tab slept)
+    // can leave all variables set while the track is silently dead. Validate
+    // the actual track so reopening the app reliably re-engages the mic.
+    if (!stream || !audioCtx || audioCtx.state === "closed" || !destNode || !recorderNode) return false;
+    const track = stream.getAudioTracks()[0];
+    if (!track || track.readyState !== "live") return false;
+    return true;
+  }
+
   async function ensureAudio() {
-    if (stream && audioCtx && audioCtx.state !== "closed" && destNode) {
+    if (audioGraphHealthy()) {
       if (audioCtx.state === "suspended") {
         try { await audioCtx.resume(); } catch (e) {}
       }
-      return true;
+      if (audioCtx.state === "running") {
+        setMicPill(recording ? "rec" : "ready");
+        return true;
+      }
+      // Context exists but will not run — fall through and rebuild from scratch.
     }
+
+    releaseAudio();
 
     stream = await navigator.mediaDevices.getUserMedia({
       audio: {
@@ -871,6 +1031,21 @@ right lower quadrant"></textarea>
         sampleRate: 48000,
       },
     });
+
+    const micTrack = stream.getAudioTracks()[0];
+    if (micTrack) {
+      micTrack.addEventListener("ended", () => {
+        // OS/device revoked the mic (sleep, unplug, Citrix audio drop).
+        if (recording && !sessionFinalized) {
+          micAlarmFired = true;
+          setMicPill("fail");
+          micAlarmBeep();
+          setStatus("⚠ Microphone was disconnected mid-dictation — check the device before trusting this text.", "err");
+        } else {
+          setMicPill("off");
+        }
+      });
+    }
 
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") {
@@ -914,20 +1089,30 @@ right lower quadrant"></textarea>
     lastMeterPct = -1;
     setGateStateUI(false);
 
-    // Audio sampling loop
+    // Audio sampling loop. Keeps streaming through the post-release "tail"
+    // phase so the last word is not clipped, and buffers chunks while the
+    // WebSocket is still connecting so the first word is not lost either.
     recorderNode.onaudioprocess = (e) => {
-      if (!recording || stopping || !ws || ws.readyState !== WebSocket.OPEN) return;
+      if (!recording) return;
+      if (stopping && stopPhase !== "tail") return;
+      if (!ws) return;
 
       const floatSamples = e.inputBuffer.getChannelData(0);
-      
+
       const downsampled = downsampleBuffer(floatSamples, audioCtx.sampleRate, 16000);
       const pcmBuffer = floatTo16BitPCM(downsampled);
       const base64Audio = arrayBufferToBase64(pcmBuffer);
-
-      ws.send(JSON.stringify({
+      const payload = JSON.stringify({
         message_type: "input_audio_chunk",
         audio_base_64: base64Audio
-      }));
+      });
+
+      if (ws.readyState === WebSocket.OPEN) {
+        flushPendingChunks();
+        try { ws.send(payload); } catch (err) {}
+      } else if (ws.readyState === WebSocket.CONNECTING && pendingChunks.length < PENDING_CHUNK_CAP) {
+        pendingChunks.push(payload);
+      }
     };
 
     if (gateTimer) clearInterval(gateTimer);
@@ -965,6 +1150,40 @@ right lower quadrant"></textarea>
           setGateStateUI(false);
         }
       }
+
+      // Recording health watchdog: catch the "dictated into a dead mic"
+      // disaster while it is happening, not after.
+      if (recording && !stopping) {
+        const nowMs = Date.now();
+        if (rms > maxRmsSeen) maxRmsSeen = rms;
+        if (rms > openT) speechDetected = true;
+
+        const track = stream && stream.getAudioTracks ? stream.getAudioTracks()[0] : null;
+        const trackDead = !track || track.readyState !== "live";
+        if (track && track.muted) {
+          if (!mutedSince) mutedSince = nowMs;
+        } else {
+          mutedSince = 0;
+        }
+
+        if (!micAlarmFired) {
+          const flatline = nowMs - recStartedAt > 2500 && maxRmsSeen < FLATLINE_RMS;
+          const mutedLong = mutedSince && nowMs - mutedSince > 1500;
+          if (trackDead || mutedLong || flatline) {
+            micAlarmFired = true;
+            setMicPill("fail");
+            micAlarmBeep();
+            setStatus("⚠ MIC NOT CAPTURING — no audio signal detected. Stop, check the microphone, then redictate.", "err");
+          }
+        }
+
+        if (!sttAlarmFired && speechDetected && wsOpenAt &&
+            nowMs - wsOpenAt > 8000 && partialCount === 0) {
+          sttAlarmFired = true;
+          sttWarnBeep();
+          setStatus("⚠ Audio is flowing but no text is coming back — the transcription service may be down.", "warn");
+        }
+      }
     }, 30);
 
     return true;
@@ -979,6 +1198,7 @@ right lower quadrant"></textarea>
     lastMeterPct = -1;
     meterBar.style.width = "0%";
     setGateStateUI(false);
+    setMicPill("off");
   }
 
   async function tryWarmOnLoad() {
@@ -991,9 +1211,25 @@ right lower quadrant"></textarea>
   }
 
   /* ───── Stream Audio & Run WebSocket Session ───── */
+  function clearSessionTimers() {
+    if (connectTimer)       { clearTimeout(connectTimer);       connectTimer = null; }
+    if (tailTimer)          { clearTimeout(tailTimer);          tailTimer = null; }
+    if (finalDeadlineTimer) { clearTimeout(finalDeadlineTimer); finalDeadlineTimer = null; }
+    if (quietTimer)         { clearTimeout(quietTimer);         quietTimer = null; }
+  }
+
+  function flushPendingChunks() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    while (pendingChunks.length) {
+      const chunk = pendingChunks.shift();
+      try { ws.send(chunk); } catch (e) { break; }
+    }
+  }
+
   async function startRecording() {
     if (recording || stopping) return;
     stopRequested = false;
+    pendingStart = false;
 
     const apiKey = apiKeyEl.value.trim();
     if (!apiKey && !(SHARED_MODE && passphraseEl.value.trim())) {
@@ -1022,14 +1258,38 @@ right lower quadrant"></textarea>
       }
     } catch (e) {
       await writeSentinel();
+      setMicPill("fail");
       setStatus("Microphone unavailable: " + (e && e.message ? e.message : e), "err");
       failBeep();
       return;
     }
 
-    // Reset transcription buffers ONLY if appendMode is off [3]
+    // New session bookkeeping; stale callbacks from a previous socket bail out
+    const mySession = ++sessionSeq;
+    sessionFinalized = false;
+    userStopped = false;
+    stopPhase = null;
+    pendingChunks = [];
+    lastWsError = "";
+    wsOpenAt = 0;
+    recStartedAt = Date.now();
+    partialCount = 0;
+    speechDetected = false;
+    maxRmsSeen = 0;
+    micAlarmFired = false;
+    sttAlarmFired = false;
+    mutedSince = 0;
+    clearSessionTimers();
+
+    // Continue the current text only when append mode is on AND the previous
+    // dictation finished recently enough (the append window).
     if (!appendModeEl.checked) {
       finalizedSegments = [];
+    } else {
+      const w = Number(appendWindowEl.value) || 0;
+      if (w > 0 && lastFinalizeAt && Date.now() - lastFinalizeAt > w * 1000) {
+        finalizedSegments = [];
+      }
     }
     currentPartial = "";
     updateLiveDisplay();
@@ -1051,39 +1311,80 @@ right lower quadrant"></textarea>
     params.append("keyterms_json", JSON.stringify(keyterms));
 
     const wsUrl = wsProtocol + "//" + window.location.host + "/api/transcribe?" + params.toString();
-    
+
     try {
       ws = new WebSocket(wsUrl);
     } catch (err) {
       await writeSentinel();
+      sessionFinalized = true;
+      setLinkPill("fail");
       setStatus("Could not open transcription pipeline.", "err");
       failBeep();
       return;
     }
 
+    setLinkPill("connecting");
+
+    // Fail LOUDLY if the pipe cannot open, before a long dictation is lost.
+    connectTimer = setTimeout(() => {
+      connectTimer = null;
+      if (mySession !== sessionSeq || sessionFinalized) return;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        lastWsError = lastWsError || "could not reach the transcription service";
+        setLinkPill("fail");
+        try { if (ws) ws.close(); } catch (e) {}
+        finalizeSession(true);
+      }
+    }, CONNECT_TIMEOUT_MS);
+
     ws.onopen = () => {
-      setStatus("WebSocket Connected. Transcribing live...", "ok");
+      if (mySession !== sessionSeq) return;
+      wsOpenAt = Date.now();
+      if (connectTimer) { clearTimeout(connectTimer); connectTimer = null; }
+      setLinkPill("live");
+      flushPendingChunks();
+      setStatus("Listening — transcribing live…", "ok");
+      if (stopPhase === "awaitFinal") {
+        // PTT was released while still connecting: buffered speech was just
+        // flushed; give the server a moment to chew on it, then commit.
+        setTimeout(() => { if (mySession === sessionSeq) beginCommitPhase(true); }, 400);
+      }
     };
 
     ws.onmessage = async (event) => {
+      if (mySession !== sessionSeq) return;
       try {
         const data = JSON.parse(event.data);
         const m_type = data.message_type;
 
         if (m_type === "partial_transcript") {
+          partialCount++;
           currentPartial = data.text;
           updateLiveDisplay();
-        } 
+        }
         else if (m_type === "committed_transcript" || m_type === "committed_transcript_with_timestamps") {
+          partialCount++;
           if (data.text && data.text.trim()) {
             finalizedSegments.push(data.text);
             currentPartial = "";
             updateLiveDisplay();
           }
-        } 
+          if (stopPhase === "awaitFinal") {
+            // The final words arrived — close as soon as the server goes quiet
+            // instead of waiting out the whole deadline.
+            if (quietTimer) clearTimeout(quietTimer);
+            quietTimer = setTimeout(() => {
+              quietTimer = null;
+              if (mySession !== sessionSeq) return;
+              try { if (ws) ws.close(); } catch (e) {}
+              finalizeSession(false);
+            }, COMMIT_QUIET_MS);
+          }
+        }
         else if (m_type === "error") {
           console.error("ElevenLabs Session Error:", data.error);
-          setStatus("ElevenLabs returned error: " + data.error, "err");
+          lastWsError = String(data.error || "unknown service error");
+          setStatus("ElevenLabs returned error: " + lastWsError, "err");
           failBeep();
         }
       } catch (err) {
@@ -1092,13 +1393,18 @@ right lower quadrant"></textarea>
     };
 
     ws.onerror = (err) => {
+      if (mySession !== sessionSeq) return;
       console.error("WebSocket Error:", err);
+      lastWsError = lastWsError || "pipeline connection error";
       setStatus("Pipeline connection error.", "err");
     };
 
     ws.onclose = () => {
+      if (mySession !== sessionSeq) return;
       console.log("WebSocket connection closed.");
-      finalizeSession();
+      setLinkPill(sessionFinalized || userStopped ? "idle" : "fail");
+      // A close we did not ask for is a failure and must sound like one.
+      finalizeSession(!userStopped);
     };
 
     // Parallel local audio recording for playback bar
@@ -1129,6 +1435,8 @@ right lower quadrant"></textarea>
     stopping = false;
     recordBtn.textContent = "Stop recording";
     recordBtn.classList.add("danger");
+    setMicPill("rec");
+    updateAppendChip();
     startBeep();
 
     if (stopRequested) {
@@ -1142,34 +1450,70 @@ right lower quadrant"></textarea>
       stopRequested = true;
       return;
     }
+    userStopped = true;
     stopping = true;
-    setStatus("Finalizing live speech transcript...", "warn");
-    
+    stopPhase = "tail";
+    setStatus("Finalizing live speech transcript…", "warn");
+
     if (mediaRecorder && mediaRecorder.state !== "inactive") {
       mediaRecorder.stop();
     }
 
-    // Wait 1.2 seconds for Scribe to output remaining audio packets, then close
-    setTimeout(() => {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        // Send a final empty flush chunk with commit: true to commit the last segment
+    // Keep streaming audio briefly after PTT release so trailing speech still
+    // in the capture pipeline reaches Scribe (this is what used to clip the
+    // last word or two), then commit and wait for the final transcript.
+    tailTimer = setTimeout(() => {
+      tailTimer = null;
+      beginCommitPhase(false);
+    }, TAIL_MS);
+  }
+
+  function beginCommitPhase(fromOpen) {
+    if (sessionFinalized) return;
+    stopPhase = "awaitFinal";
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      flushPendingChunks();
+      try {
+        // Final empty chunk with commit: true forces the last segment out
         ws.send(JSON.stringify({
           message_type: "input_audio_chunk",
           audio_base_64: "",
           commit: true
         }));
-        ws.close();
-      } else {
-        finalizeSession();
-      }
-    }, 1200);
+      } catch (e) {}
+      if (finalDeadlineTimer) clearTimeout(finalDeadlineTimer);
+      finalDeadlineTimer = setTimeout(() => {
+        finalDeadlineTimer = null;
+        try { if (ws) ws.close(); } catch (e) {}
+        finalizeSession(false);
+      }, FINAL_WAIT_MS);
+    } else if (ws && ws.readyState === WebSocket.CONNECTING && !fromOpen) {
+      // Still connecting: ws.onopen sees stopPhase === "awaitFinal" and calls
+      // us back; the connect timeout covers the never-opens case.
+    } else {
+      finalizeSession(!userStopped);
+    }
   }
 
-  async function finalizeSession() {
+  async function finalizeSession(unexpected) {
+    if (sessionFinalized) return;
+    sessionFinalized = true;
+    clearSessionTimers();
+
     recording = false;
     stopping = false;
+    stopPhase = null;
+    stopRequested = false;
     recordBtn.textContent = "Start recording";
     recordBtn.classList.remove("danger");
+    if (micAlarmFired) setMicPill("fail");
+    else setMicPill(audioGraphHealthy() ? "ready" : "off");
+    if (!unexpected) setLinkPill("idle");
+
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      try { mediaRecorder.stop(); } catch (e) {}
+    }
 
     if (chunks.length) {
       const blob = new Blob(chunks, { type: (chunks[0] && chunks[0].type) || "audio/webm" });
@@ -1180,11 +1524,20 @@ right lower quadrant"></textarea>
     }
 
     const cleaned = cleanTranscript(latestText);
+    lastFinalizeAt = Date.now();
 
     if (!cleaned.trim()) {
       await writeSentinel();
-      setStatus("No speech detected.", "warn");
+      if (unexpected) {
+        setStatus("Dictation FAILED — " + (lastWsError || "connection lost") + ". Nothing was transcribed; sentinel copied.", "err");
+      } else if (micAlarmFired) {
+        setStatus("No speech detected — the microphone never produced a signal. Check the mic.", "err");
+      } else {
+        setStatus("No speech detected.", "warn");
+      }
       failBeep();
+      updateAppendChip();
+      maybePendingStart();
       return;
     }
 
@@ -1193,16 +1546,40 @@ right lower quadrant"></textarea>
 
     if (autoCopyEl.checked) {
       const copied = await copyText(cleaned);
-      setStatus(
-        copied ? "Live transcript saved & copied. Done!"
-               : "Live transcript saved — copy FAILED (keep tab focused; click 'Copy latest').",
-        copied ? "ok" : "warn"
-      );
+      if (!copied) {
+        setStatus("Transcript saved but clipboard copy FAILED — do NOT paste yet; click 'Copy latest'.", "err");
+        failBeep();
+      } else if (unexpected) {
+        setStatus("⚠ Connection lost mid-dictation — PARTIAL transcript copied. Verify it before pasting!", "err");
+        failBeep();
+      } else if (micAlarmFired) {
+        setStatus("⚠ Mic signal dropped during this dictation — verify the text before pasting!", "err");
+        failBeep();
+      } else {
+        setStatus("Live transcript saved & copied. Done!", "ok");
+        doneBeep();
+      }
     } else {
-      setStatus("Live transcript saved.", "ok");
+      if (unexpected) {
+        setStatus("⚠ Connection lost mid-dictation — partial transcript saved (not copied).", "err");
+        failBeep();
+      } else {
+        setStatus("Live transcript saved.", "ok");
+        doneBeep();
+      }
     }
 
-    doneBeep();
+    updateAppendChip();
+    maybePendingStart();
+  }
+
+  function maybePendingStart() {
+    // PTT pressed again while the previous dictation was finalizing —
+    // honor it so rapid consecutive dictations are never swallowed.
+    if (pendingStart) {
+      pendingStart = false;
+      setTimeout(() => { if (!recording && !stopping) startRecording(); }, 60);
+    }
   }
 
   /* ───── Controls & Event Listeners ───── */
@@ -1228,7 +1605,17 @@ right lower quadrant"></textarea>
     finalizedSegments = []; // Fixed: Make sure screen buffer is cleared alongside history
     currentPartial = "";
     renderHistory();
+    updateAppendChip();
     setStatus("History cleared.");
+  };
+
+  freshBtn.onclick = () => {
+    finalizedSegments = [];
+    currentPartial = "";
+    latestText = "";
+    latestEl.textContent = "";
+    updateAppendChip();
+    setStatus("Current text cleared — the next dictation starts fresh (history kept).", "ok");
   };
 
   copyBtn.onclick = () => { if (latestText) copyText(latestText); };
@@ -1289,6 +1676,13 @@ right lower quadrant"></textarea>
     tryWarmOnLoad();
   });
 
+  appendModeEl.addEventListener("change", updateAppendChip);
+  appendWindowEl.addEventListener("input", () => { saveSettings(); updateAppendChip(); });
+  if (advancedEl) advancedEl.addEventListener("toggle", saveSettings);
+
+  // Keep the "appending vs fresh" countdown honest
+  setInterval(updateAppendChip, 1000);
+
   for (const el of [
     apiKeyEl, saveApiKeyEl, keytermsEl, timestampsEl,
     noVerbatimEl, autoCopyEl, appendModeEl, startBeepEl,
@@ -1303,6 +1697,7 @@ right lower quadrant"></textarea>
     if (e.code === "F13") {
       e.preventDefault();
       if (!recording && !stopping) startRecording();
+      else if (stopping) pendingStart = true; // PTT again while finalizing: queue it
       return;
     }
     if (e.code === "F14") {
@@ -1316,6 +1711,28 @@ right lower quadrant"></textarea>
     try { releaseAudio(); } catch (e) {}
   });
 
+  // Re-engage the mic when the app comes back: bfcache restores and slept
+  // tabs can leave a dead MediaStream behind that looks alive.
+  window.addEventListener("pageshow", (e) => {
+    if (e.persisted) releaseAudio();
+    if (!recording && !stopping) tryWarmOnLoad();
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && !recording && !stopping) {
+      tryWarmOnLoad();
+    }
+  });
+
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+    navigator.mediaDevices.addEventListener("devicechange", () => {
+      if (!recording && !stopping && !audioGraphHealthy()) {
+        releaseAudio();
+        tryWarmOnLoad();
+      }
+    });
+  }
+
   if (SHARED_MODE) {
     passphraseRow.style.display = "";
     if (apiKeyLabelEl) apiKeyLabelEl.textContent = "ElevenLabs API key (optional — shared passphrase access in use)";
@@ -1326,6 +1743,7 @@ right lower quadrant"></textarea>
   updateGateLabels();
   updateKeytermHint();
   renderHistory();
+  updateAppendChip();
   tryWarmOnLoad();
 })();
 </script>
