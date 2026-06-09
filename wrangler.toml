@@ -1,4 +1,4 @@
-name = "scribe-realtime-dictation"
+name = "elevenrealtime"
 main = "worker.js"
 compatibility_date = "2025-01-01"
 
