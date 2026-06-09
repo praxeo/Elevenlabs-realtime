@@ -140,8 +140,8 @@ check('status shows live', status().includes('transcribing live'), status());
 check('link pill LIVE', doc.getElementById('linkPill').textContent === 'LIVE');
 check('mic pill REC', doc.getElementById('micPill').textContent === 'REC');
 s1.msg({ message_type: 'partial_transcript', text: 'patient presents' });
-s1.msg({ message_type: 'committed_transcript', text: 'Patient presents with ascites.' });
-check('committed text displayed', latest().includes('Patient presents with ascites.'), latest());
+s1.msg({ message_type: 'committed_transcript', text: 'Patient presents with... ascites.' }); // pause artifact
+check('committed text displayed, ellipsis stripped', latest().includes('Patient presents with ascites.'), latest());
 
 // stop (PTT release) — audio must keep flowing during the tail
 const sentBeforeStop = s1.sent.length;
@@ -154,13 +154,14 @@ const commitFrames = s1.sent.filter((d) => JSON.parse(d).commit === true);
 check('commit frame sent after tail', commitFrames.length === 1);
 pump(2);
 check('no audio after commit phase', s1.sent.filter((d) => !JSON.parse(d).commit).length === sentBeforeStop + 3);
-// server returns the final commit for the trailing words
-s1.msg({ message_type: 'committed_transcript', text: 'Last words intact.' });
+// server returns the final commit for the trailing words (unicode pause artifact)
+s1.msg({ message_type: 'committed_transcript', text: 'Last words… intact.' });
 await sleep(500); // > COMMIT_QUIET_MS
 check('socket closed after quiet period', s1.closed);
 check('final text includes trailing commit', latest().includes('Last words intact.'), latest());
 check('success status', status().includes('Done!'), status());
 check('clipboard holds full text', clipboard.includes('Patient presents with ascites.') && clipboard.includes('Last words intact.'), JSON.stringify(clipboard));
+check('no ellipses reach the clipboard', !clipboard.includes('...') && !clipboard.includes('…'), JSON.stringify(clipboard));
 check('append chip visible + appending', doc.getElementById('appendChip').textContent.includes('append'), doc.getElementById('appendChip').textContent);
 
 // ===== Scenario 2: append within window, then unexpected mid-dictation disconnect =====

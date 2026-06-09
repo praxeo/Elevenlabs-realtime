@@ -433,6 +433,11 @@ right lower quadrant"></textarea>
       </label>
 
       <label class="checkbox">
+        <input type="checkbox" id="stripEllipses" checked />
+        Remove ellipses (pauses become "…" otherwise)
+      </label>
+
+      <label class="checkbox">
         <input type="checkbox" id="trailingSpace" checked />
         Trailing space (for consecutive dictations)
       </label>
@@ -499,21 +504,25 @@ right lower quadrant"></textarea>
     </section>
 
     <section class="card">
-      <div class="row">
-        <button id="copyBtn">Copy latest</button>
-        <button id="freshBtn" title="Clear the current text so the next dictation starts a new note (history is kept)">Start fresh</button>
-        <button id="downloadBtn">Download .txt</button>
-      </div>
-
-      <label>Last recorded audio (captured locally)</label>
-      <audio id="audioPreview" controls style="width:100%; margin-bottom:10px;"></audio>
-
-      <div class="row">
-        <button id="downloadAudioBtn">Download audio</button>
-      </div>
-
-      <label>Latest transcript <span id="appendChip" class="pill" style="display:none;"></span></label>
+      <label style="margin-top: 0;">Latest transcript <span id="appendChip" class="pill" style="display:none;"></span></label>
       <div id="latest" class="big"></div>
+
+      <div class="row" style="margin-top: 10px;">
+        <button id="copyBtn">Copy latest</button>
+        <button id="freshBtn" title="Clear the dictation box so the next dictation starts a new note (history is kept)">Clear dictation box</button>
+      </div>
+
+      <details class="help">
+        <summary>Last recorded audio &amp; downloads</summary>
+        <div class="body">
+          <label>Last recorded audio (captured locally)</label>
+          <audio id="audioPreview" controls style="width:100%; margin-bottom:10px;"></audio>
+          <div class="row">
+            <button id="downloadAudioBtn">Download audio</button>
+            <button id="downloadBtn">Download transcripts .txt</button>
+          </div>
+        </div>
+      </details>
 
       <div class="row" style="margin-top:14px;">
         <button id="toggleHistoryBtn">Show saved transcripts</button>
@@ -556,6 +565,7 @@ right lower quadrant"></textarea>
   const noiseSuppressEl  = document.getElementById("noiseSuppress");
   const startBeepEl      = document.getElementById("startBeep");
   const stripNewlinesEl  = document.getElementById("stripNewlines");
+  const stripEllipsesEl  = document.getElementById("stripEllipses");
   const trailingSpaceEl  = document.getElementById("trailingSpace");
 
   const gateOpenEl       = document.getElementById("gateOpen");
@@ -739,10 +749,15 @@ right lower quadrant"></textarea>
   /* ───── Text processing ───── */
   function cleanTranscript(raw) {
     let t = raw;
+    if (stripEllipsesEl.checked) {
+      // Scribe renders dictation pauses as ellipses; strip both forms.
+      t = t.replace(/\\u2026/g, " ").replace(/\\.{3,}/g, " ");
+    }
     if (stripNewlinesEl.checked) {
       t = t.replace(/[\\r\\n]+/g, " ");
     }
     t = t.replace(/ +/g, " ").trim();
+    t = t.replace(/ ([,.;:!?])/g, "$1");
     if (trailingSpaceEl.checked && t.length > 0) t += " ";
     return t;
   }
@@ -890,6 +905,7 @@ right lower quadrant"></textarea>
       noiseSuppress:  noiseSuppressEl.checked,
       startBeep:      startBeepEl.checked,
       stripNewlines:  stripNewlinesEl.checked,
+      stripEllipses:  stripEllipsesEl.checked,
       trailingSpace:  trailingSpaceEl.checked,
       gateOpen:       gateOpenEl.value,
       gateClose:       gateCloseEl.value,
@@ -927,6 +943,7 @@ right lower quadrant"></textarea>
       if (typeof s.noiseSuppress === "boolean") noiseSuppressEl.checked = s.noiseSuppress;
       if (typeof s.startBeep     === "boolean") startBeepEl.checked     = s.startBeep;
       if (typeof s.stripNewlines === "boolean") stripNewlinesEl.checked = s.stripNewlines;
+      if (typeof s.stripEllipses === "boolean") stripEllipsesEl.checked = s.stripEllipses;
       if (typeof s.trailingSpace === "boolean") trailingSpaceEl.checked = s.trailingSpace;
       if (s.gateOpen  !== undefined) gateOpenEl.value  = s.gateOpen;
       if (s.gateClose !== undefined) gateCloseEl.value = s.gateClose;
@@ -1704,7 +1721,7 @@ right lower quadrant"></textarea>
     latestText = "";
     latestEl.textContent = "";
     updateAppendChip();
-    setStatus("Current text cleared — the next dictation starts fresh (history kept).", "ok");
+    setStatus("Dictation box cleared — the next dictation starts a new note (history kept).", "ok");
   };
 
   copyBtn.onclick = () => { if (latestText) copyText(latestText); };
@@ -1788,7 +1805,7 @@ right lower quadrant"></textarea>
   for (const el of [
     apiKeyEl, saveApiKeyEl, keytermsEl, timestampsEl,
     noVerbatimEl, autoCopyEl, appendModeEl, startBeepEl,
-    stripNewlinesEl, trailingSpaceEl,
+    stripNewlinesEl, stripEllipsesEl, trailingSpaceEl,
   ]) {
     el.addEventListener("change", saveSettings);
     el.addEventListener("input", saveSettings);

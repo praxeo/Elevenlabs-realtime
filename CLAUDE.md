@@ -32,7 +32,7 @@ A one-file Cloudflare Worker serving a realtime medical dictation app (ElevenLab
 - **STT feed is pre-gate**: Scribe receives raw high-passed audio; the noise gate shapes only the local `MediaRecorder` preview. Don't route the gate into the STT path.
 - **Shared mode**: the master API key must never reach the browser; the Worker injects it server-side after the constant-time passphrase check (`safeEqual`).
 - **Failure-aware finalize**: unexpected disconnects copy whatever partial text exists, but with red status + fail beep. No-text failures copy the sentinel. A failed clipboard write must fail-beep.
-- `cleanTranscript` semantics (strip newlines, collapse spaces, optional trailing space) — downstream paste workflows depend on them.
+- `cleanTranscript` semantics (optional ellipsis strip — Scribe renders pauses as "…"/"..." — strip newlines, collapse spaces, tighten space-before-punctuation, optional trailing space) — downstream paste workflows depend on them.
 
 ## Client session state machine
 

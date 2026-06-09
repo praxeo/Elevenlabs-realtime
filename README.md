@@ -78,7 +78,7 @@ Open the deployed URL in Chrome/Edge → browser menu → **Install app** (or th
 2. Start dictating: **tap Ctrl + Space** (tap again to stop) or **hold it** like a radio mic — or hold CapsLock via AHK, or click the record button. Start beep = go. You can speak immediately; audio is buffered while the pipeline connects.
 3. Speak. Text appears live; the **REC** and **LIVE** pills confirm both mic and pipeline are healthy.
 4. Release. The app streams a short audio tail, commits, waits for the final words, then copies the full text. **Rising double beep = text is on the clipboard.** Switch windows and paste.
-5. Dictate again within the append window to continue the same note (the combined text is recopied each time), or wait for the window to lapse / press **Start fresh** to begin a new note.
+5. Dictate again within the append window to continue the same note (the combined text is recopied each time), or wait for the window to lapse / press **Clear dictation box** to begin a new note.
 
 ### Audio cues
 
@@ -129,6 +129,7 @@ Keep the dictation tab/window focused until the success beep if you rely on auto
 | **Push-to-talk hotkey** | Ctrl + Space | Rebind to anything (click the field, press a combo). Tap toggles; holds longer than ~400 ms behave as press-and-hold. F13/F14 stay active regardless. |
 | **Keyterms** | — | Curate per specialty: drug names, anatomy, eponyms, colleague names. ≤ 50 terms, ≤ 20 chars, ≤ 5 words each. Adds ~20 % to cost. The single biggest accuracy lever available. |
 | **Append window** | 45 s | Shorten if stale text keeps riding along into new notes; lengthen (or 0 = always) if you dictate long notes with long thinking pauses. |
+| **Remove ellipses** | on | Scribe writes dictation pauses as "…"/"..." — this strips them (and tightens any orphaned space before punctuation). Turn off only if you genuinely dictate ellipses. |
 | **Scribe pause limit** (`vad_silence_threshold_secs`) | 2.0 s | Raise if segments finalize mid-sentence and grammar suffers; lower for snappier commits on short utterances. |
 | **Scribe noise filter** (`vad_threshold`) | 0.55 | Raise in shared/noisy rooms to reject background speech; lower if soft speech is being missed. |
 | **Scribe click filter** (`min_speech_duration_ms`) | 150 ms | Raise if keyboard clicks / rustles produce stray words; lower if clipped single-word utterances ("yes", "stat") get dropped. |
@@ -157,7 +158,7 @@ Keep the dictation tab/window focused until the success beep if you rely on auto
 - **Glance at the meter before a long dictation.** If the bar doesn't move when you speak, the watchdog will alarm at ~2.5 s anyway — but the glance costs nothing.
 - **Treat red status as "verify before pasting."** Partial text is still copied after a mid-dictation failure (losing it would be worse), but it is flagged red + fail-beeped for a reason.
 - **Curate keyterms like a formulary.** Prune terms when you rotate services; 50 well-chosen terms beat 50 stale ones, and they're 20 % of your bill.
-- **Use the append window for multi-breath notes**, and **Start fresh** when switching patients/fields — the chip above the transcript always tells you which will happen next.
+- **Use the append window for multi-breath notes**, and **Clear dictation box** when switching patients/fields — the chip above the transcript always tells you which will happen next.
 - **Keep the last-audio preview in mind when alpha testing.** Every dictation's gated audio is captured locally; when a transcription is wrong, download the audio — it answers "did it mishear, or did it not hear?"
 - **Install as a PWA** on shared workstations: standalone window, persistent mic grant, no tab roulette.
 - **History is the safety net.** Last 100 transcripts persist in `localStorage`; a botched clipboard is never a lost dictation.
@@ -175,7 +176,7 @@ The biggest risk in dictation is speaking a long passage into a dead pipeline an
 ## Append semantics
 
 - **Append mode on (default)**: a dictation started within the **append window** (default 45 s, configurable, 0 = always) continues the current note; the combined text is what gets copied. After the window lapses, the next dictation starts a fresh note automatically.
-- **Start fresh** button: clears the current note immediately (history untouched).
+- **Clear dictation box** button: clears the current note immediately (history untouched).
 - **Append mode off**: every dictation is its own note.
 
 The mental model: **the clipboard always equals the current note.** Appending recopies the whole note, so a paste at any point yields everything dictated so far; pasting replaces, so nothing is double-entered.
@@ -191,8 +192,10 @@ The mental model: **the clipboard always equals the current note.** Appending re
 - [x] Connect timeout, unexpected-disconnect handling, failure-aware clipboard semantics
 - [x] Failure beeps always audible (background-tab safe, not gated by the beep checkbox)
 - [x] Mic re-engagement on reopen (track revalidation on start / pageshow / visibility / devicechange)
-- [x] Append window + countdown chip + Start fresh
+- [x] Append window + countdown chip + Clear dictation box
 - [x] Advanced section for developer-ish sliders; mic/link status pills
+- [x] ~400 ms pre-roll (first-word rescue) prepended at session start
+- [x] Ellipsis (pause-artifact) filter; transcript-first layout with the audio preview tucked away
 - [x] PWA manifest + icons; `wrangler.toml`; jsdom flow-test harness (`tests/flow.test.mjs`)
 - [x] Queued PTT restart while the previous dictation finalizes
 - [x] Configurable in-app hotkey (default Ctrl + Space, tap-or-hold) for use without AHK
