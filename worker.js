@@ -607,6 +607,7 @@ right lower quadrant"></textarea>
   let stopPhase = null;        // null | "tail" | "awaitFinal"
   let pendingStart = false;    // F13 pressed while previous session was finalizing
   let pendingChunks = [];      // audio captured while the WebSocket is still connecting
+  let prerollFrames = [];      // ring of raw idle frames; prepended at start so the first word survives
   let lastWsError = "";
   let wsOpenAt = 0;
   let recStartedAt = 0;
@@ -657,6 +658,8 @@ right lower quadrant"></textarea>
   const PENDING_CHUNK_CAP  = 400;   // ~35s of audio buffered while the socket connects
   const FLATLINE_RMS       = 0.0008; // below this for the whole session = mic is almost certainly dead
   const HOTKEY_TAP_MS      = 400;   // press shorter than this = tap (toggle); longer = hold (PTT)
+  const PREROLL_MS         = 400;   // idle audio kept in memory and prepended at start (first-word rescue)
+  const PREROLL_FRAME_CAP  = 12;    // hard cap on the pre-roll ring (~1s of frames)
 
   const STORE_KEY              = "scribe_v2_transcripts_v9";
   const SETTINGS_KEY           = "scribe_v2_settings_v9";
@@ -1150,9 +1153,21 @@ right lower quadrant"></textarea>
     // phase so the last word is not clipped, and buffers chunks while the
     // WebSocket is still connecting so the first word is not lost either.
     recorderNode.onaudioprocess = (e) => {
-      if (!recording) return;
-      if (stopping && stopPhase !== "tail") return;
-      if (!ws) return;
+      const live = recording && (!stopping || stopPhase === "tail") && ws;
+      if (!live) {
+        // Idle: keep a short pre-roll ring so the first word — often spoken
+        // the instant the key lands, before the session is armed — survives.
+        // Held in memory only; sent only if a dictation starts within
+        // PREROLL_MS, discarded otherwise. Frames here were never sent, so
+        // prepending them can't double-transcribe anything.
+        prerollFrames.push({
+          t: Date.now(),
+          rate: audioCtx ? audioCtx.sampleRate : 48000,
+          samples: new Float32Array(e.inputBuffer.getChannelData(0)),
+        });
+        while (prerollFrames.length > PREROLL_FRAME_CAP) prerollFrames.shift();
+        return;
+      }
 
       const floatSamples = e.inputBuffer.getChannelData(0);
 
@@ -1283,6 +1298,23 @@ right lower quadrant"></textarea>
     }
   }
 
+  function buildPrerollChunks() {
+    // Encode the idle frames captured just before this session started.
+    // Anything older than PREROLL_MS is stale chatter and dropped.
+    const minT = Date.now() - PREROLL_MS;
+    const out = [];
+    for (const f of prerollFrames) {
+      if (f.t <= minT) continue;
+      const downsampled = downsampleBuffer(f.samples, f.rate, 16000);
+      out.push(JSON.stringify({
+        message_type: "input_audio_chunk",
+        audio_base_64: arrayBufferToBase64(floatTo16BitPCM(downsampled))
+      }));
+    }
+    prerollFrames = [];
+    return out;
+  }
+
   async function startRecording() {
     if (recording || stopping) return;
     stopRequested = false;
@@ -1326,7 +1358,7 @@ right lower quadrant"></textarea>
     sessionFinalized = false;
     userStopped = false;
     stopPhase = null;
-    pendingChunks = [];
+    pendingChunks = buildPrerollChunks(); // first-word rescue: lead with the pre-roll
     lastWsError = "";
     wsOpenAt = 0;
     recStartedAt = Date.now();

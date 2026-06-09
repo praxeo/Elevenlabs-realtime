@@ -41,7 +41,8 @@ One WebSocket per dictation. Per-session state is guarded by `sessionSeq` (stale
 ```
 idle
  └─ startRecording(): ensureAudio() revalidates/rebuilds the graph, resets per-session
-    state, applies append-window decision, opens WS
+    state, applies append-window decision, seeds pendingChunks with the pre-roll
+    (buildPrerollChunks: last PREROLL_MS of idle frames), opens WS
      └─ connecting: onaudioprocess buffers frames (cap PENDING_CHUNK_CAP);
         CONNECT_TIMEOUT_MS → loud fail (sentinel + failBeep)
          └─ open: flush buffer, stream live
@@ -58,6 +59,7 @@ idle
 - F13 during finalization sets `pendingStart`; `maybePendingStart()` starts the next session after finalize.
 - Trailing partials are part of `latestText` — never discard a partial at shutdown; that is the anti-clipping backstop if the commit reply never comes.
 - Mic re-engagement: `audioGraphHealthy()` checks the actual `MediaStreamTrack.readyState`, not just variable presence; rebuilt on start and on `pageshow` / `visibilitychange` / `devicechange`. bfcache restores leave dead streams that *look* alive — that was the original "mic won't engage on reopen" bug.
+- Pre-roll: while not live-streaming, `onaudioprocess` keeps raw frames in `prerollFrames` (memory only, capped); session start prepends the last `PREROLL_MS` of them. The ring only ever holds never-sent frames (live frames go to the socket, not the ring), so prepending cannot double-transcribe — keep that property when touching the audio pump.
 
 ## ElevenLabs realtime API (as used)
 
@@ -81,9 +83,9 @@ const js = h.slice(h.indexOf('<script>')+8, h.indexOf('</'+'script>'));
 require('fs').writeFileSync('/tmp/served.js', js);" 2>/dev/null || true
 node --check /tmp/served.js
 
-# Full session-flow simulation (7 scenarios: happy path incl. buffering/tail/commit-wait,
-# unexpected disconnect, dead-mic alarm, append-window expiry, connect timeout,
-# queued PTT, hotkey tap/hold):
+# Full session-flow simulation (7 scenarios: happy path incl. pre-roll/buffering/
+# tail/commit-wait, unexpected disconnect, dead-mic alarm, append-window expiry,
+# connect timeout, queued PTT, hotkey tap/hold):
 npm install --no-save jsdom
 node tests/flow.test.mjs
 ```
@@ -103,6 +105,7 @@ jsdom gotchas baked into the harness: define `window.isSecureContext = true` and
 | `FLATLINE_RMS` | 0.0008 | Dead-mic threshold for the watchdog |
 | `PENDING_CHUNK_CAP` | 400 | ≈ 35 s buffered while connecting |
 | `HOTKEY_TAP_MS` | 400 | Hotkey press shorter = tap (toggle), longer = hold (PTT) |
+| `PREROLL_MS` | 400 | Idle audio prepended at session start (first-word rescue) |
 
 ## Deployment
 

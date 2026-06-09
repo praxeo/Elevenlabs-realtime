@@ -96,6 +96,10 @@ const dom = new JSDOM(html, {
       value: { getUserMedia: () => Promise.resolve(mockStream), addEventListener() {} },
       configurable: true,
     });
+    Object.defineProperty(window.navigator, 'permissions', {
+      value: { query: () => Promise.resolve({ state: 'granted' }) }, // warm mic on load
+      configurable: true,
+    });
     Object.defineProperty(window.navigator, 'clipboard', {
       value: { writeText(t) { clipboard = t; return Promise.resolve(); } },
       configurable: true,
@@ -119,8 +123,10 @@ const pump = (n = 3) => { // fire onaudioprocess n times (~85ms of audio each)
 await sleep(200);
 doc.getElementById('apiKey').value = 'test-key';
 
-// ===== Scenario 1: happy path with slow connect (buffer + flush), tail, commit, final =====
+// ===== Scenario 1: happy path with slow connect (pre-roll + buffer + flush), tail, commit, final =====
 console.log('--- scenario 1: happy path ---');
+check('mic warmed on load (pre-roll possible)', scriptNode !== null);
+pump(3); // speaking as/just before the key lands -> pre-roll ring, not discarded
 doc.getElementById('recordBtn').click();
 await sleep(150);
 const s1 = sockets[0];
@@ -129,7 +135,7 @@ pump(4); // speak while connecting
 check('no frames sent while connecting', s1.sent.length === 0);
 s1.open();
 await sleep(30);
-check('buffered frames flushed on open', s1.sent.length === 4, s1.sent.length);
+check('pre-roll + buffered frames flushed on open', s1.sent.length === 7, s1.sent.length);
 check('status shows live', status().includes('transcribing live'), status());
 check('link pill LIVE', doc.getElementById('linkPill').textContent === 'LIVE');
 check('mic pill REC', doc.getElementById('micPill').textContent === 'REC');

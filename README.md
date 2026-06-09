@@ -8,7 +8,7 @@ Designed for clinicians dictating into **Cerner running inside Citrix**: push-to
 
 - **Push-to-talk dictation** with a configurable in-app hotkey — default **Ctrl + Space** (tap to start/stop, hold to talk) — plus the F13/F14 contract for existing AutoHotkey CapsLock setups, which keeps working unchanged.
 - **Live transcript** streamed from ElevenLabs Scribe v2 Realtime over a secure WebSocket proxy (the API key never reaches the browser in shared mode).
-- **Anti-clipping pipeline**: audio buffered from the instant you press PTT, a post-release audio tail, and a commit-then-wait shutdown so the first and last words survive.
+- **Anti-clipping pipeline**: a ~400 ms pre-roll (the moment *before* you pressed is captured too), buffering while the socket connects, a post-release audio tail, and a commit-then-wait shutdown — so the first and last words survive.
 - **Loud failure notification**: dead-mic alarm *while you're dictating*, connect-timeout alarm, failure beeps that play even from a background tab, clipboard sentinel (`##DICTATION_FAILED##`), and mic/link status pills.
 - **Smart append window**: consecutive dictations continue the same note; stale text drops off automatically.
 - **Custom keyword biasing** (up to 50 keyterms) for specialized medical vocabulary.
@@ -147,6 +147,7 @@ Keep the dictation tab/window focused until the success beep if you rely on auto
 | `FLATLINE_RMS` | 0.0008 | Below this for the whole session ⇒ dead-mic alarm. If you get false alarms on a *very* quiet/gated headset, lower it; if a dead Citrix audio redirect ever passes silently, raise it. Verify against your real noise floor. |
 | `PENDING_CHUNK_CAP` | 400 | ~35 s of audio buffered while the socket connects. |
 | `HOTKEY_TAP_MS` | 400 | Hotkey presses shorter than this are taps (toggle); longer are holds (push-to-talk). |
+| `PREROLL_MS` | 400 | Idle audio kept in memory and prepended at session start (first-word rescue). Raise to ~600 if onsets still clip; it only ever contains never-sent audio, so duplicates are impossible. |
 
 `echoCancellation` is currently `true` in `getUserMedia`. For a close-talking headset with no speaker playback, turning it off is a legitimate accuracy experiment (less DSP mangling of plosives) — change it in `ensureAudio()`.
 
@@ -166,7 +167,7 @@ Keep the dictation tab/window focused until the success beep if you rely on auto
 The biggest risk in dictation is speaking a long passage into a dead pipeline and finding out afterwards. This app attacks that from several angles:
 
 - **While recording**: a watchdog checks the mic track (`ended`/`muted`) and the RMS level. A flatlined mic triggers the three-beep alarm and red status *within ~2.5 s of pressing PTT* — before the long paragraph, not after.
-- **Connecting**: if the WebSocket can't open within 5 s, the dictation fails loudly (sentinel + low beep) instead of silently discarding audio. Audio spoken during connection setup is buffered and flushed once the socket opens.
+- **Connecting**: if the WebSocket can't open within 5 s, the dictation fails loudly (sentinel + low beep) instead of silently discarding audio. Audio spoken during connection setup is buffered and flushed once the socket opens, and the last ~400 ms *before* the keypress (the pre-roll) is prepended — people start the first word as the key lands, and that audio would otherwise be gone. The pre-roll lives only in memory while the mic is warm and is discarded unless a dictation starts immediately.
 - **Mid-dictation disconnect**: an unexpected close is treated as a failure — whatever partial text arrived is still copied, but the status turns red and the failure beep plays so you verify before pasting.
 - **Clipboard**: if the copy fails (tab lost focus too early), the failure beep plays instead of the success beep. If nothing was transcribed at all, the sentinel `##DICTATION_FAILED##` is copied so a blind paste is self-evident rather than silently stale.
 - **Reopening the app**: the audio graph is revalidated on every start, on tab restore (`pageshow`/bfcache), on visibility change, and on device changes — a stale, silently-dead mic stream is torn down and re-acquired instead of being trusted.
@@ -231,6 +232,7 @@ The mental model: **the clipboard always equals the current note.** Appending re
 | Three-beep alarm right after starting | OS muted the mic, wrong input device, or Citrix audio redirection dropped. Check the meter moves when you speak. |
 | Text stops mid-dictation, red status | Network/service drop. The partial transcript was still copied — verify before pasting. |
 | Last words missing | Should be fixed by the tail + commit-wait flow. If it recurs, raise `TAIL_MS` and/or the Scribe pause limit. |
+| First words missing | The pre-roll captures ~400 ms before the keypress, so anticipation is covered while the mic is warm. If it persists: lower the Scribe **noise filter** (e.g. 0.55 → 0.40) and **click filter** (150 → 100 ms) — server-side VAD can eat a soft onset. Note the *audio preview* always soft-clips onsets (the local gate opens late); that's cosmetic — Scribe hears the ungated feed. On the very first dictation after a cold open there is no pre-roll yet — speak on the start beep. |
 | Success beep but paste shows `##DICTATION_FAILED##` | The previous dictation failed and left the sentinel; the beep belongs to a newer one. Use the history panel. |
 | Nothing transcribes, *LINK FAIL* | Worker can't reach ElevenLabs or the key/passphrase is wrong — the status line shows the upstream error. |
 | No beeps in the background | Beeps reuse the live audio context precisely for this; if the mic was never warmed, there is no running context — warm the mic first (open the app once). |
