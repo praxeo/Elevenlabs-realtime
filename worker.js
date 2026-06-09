@@ -367,6 +367,15 @@ const INDEX_HTML = `<!doctype html>
         <button id="clearBtn">Clear history</button>
       </div>
 
+      <label for="hotkeyBtn">Push‑to‑talk hotkey</label>
+      <div class="row">
+        <button id="hotkeyBtn" title="Click, then press the key combo you want">Ctrl + Space</button>
+        <button id="hotkeyResetBtn" title="Reset to Ctrl + Space">Reset</button>
+      </div>
+      <div class="hint" style="margin-top: 6px;">
+        Tap = start/stop · Hold = push‑to‑talk · F13/F14 (AutoHotkey) always work
+      </div>
+
       <div class="divider"></div>
 
       <label>Mic level
@@ -381,9 +390,9 @@ const INDEX_HTML = `<!doctype html>
       </div>
 
       <div class="status" id="status">
-        CapsLock via AHK: hold to record, release to stop. Browser beeps when text is
-        ready on the clipboard — keep this tab focused until the beep, then switch
-        windows and Ctrl+V.
+        Ctrl+Space: tap to start/stop, hold to talk (CapsLock via AHK also works).
+        Browser beeps when text is ready on the clipboard — keep this tab focused
+        until the beep, then switch windows and Ctrl+V.
       </div>
 
       <label for="keyterms">Context / vocabulary keyterms</label>
@@ -574,6 +583,8 @@ right lower quadrant"></textarea>
   const micPillEl        = document.getElementById("micPill");
   const linkPillEl       = document.getElementById("linkPill");
   const advancedEl       = document.getElementById("advanced");
+  const hotkeyBtn        = document.getElementById("hotkeyBtn");
+  const hotkeyResetBtn   = document.getElementById("hotkeyResetBtn");
 
   let mediaRecorder = null;
   let chunks = [];
@@ -611,6 +622,13 @@ right lower quadrant"></textarea>
   let finalDeadlineTimer = null;
   let quietTimer = null;
 
+  // In-app push-to-talk hotkey (F13/F14 via AHK always work in addition)
+  const DEFAULT_HOTKEY = { ctrl: true, alt: false, shift: false, meta: false, code: "Space" };
+  let hotkey = Object.assign({}, DEFAULT_HOTKEY);
+  let capturingHotkey = false;
+  let hotkeyEngaged = false; // current press-cycle started/queued a dictation
+  let hotkeyDownAt = 0;
+
   // Persistent audio nodes
   let stream = null;
   let audioCtx = null;
@@ -638,6 +656,7 @@ right lower quadrant"></textarea>
   const COMMIT_QUIET_MS    = 350;   // close this soon after the last committed transcript arrives
   const PENDING_CHUNK_CAP  = 400;   // ~35s of audio buffered while the socket connects
   const FLATLINE_RMS       = 0.0008; // below this for the whole session = mic is almost certainly dead
+  const HOTKEY_TAP_MS      = 400;   // press shorter than this = tap (toggle); longer = hold (PTT)
 
   const STORE_KEY              = "scribe_v2_transcripts_v9";
   const SETTINGS_KEY           = "scribe_v2_settings_v9";
@@ -776,6 +795,34 @@ right lower quadrant"></textarea>
     }
   }
 
+  /* ───── Configurable push-to-talk hotkey ───── */
+  function hotkeyLabel(hk) {
+    if (!hk || !hk.code) return "none";
+    const parts = [];
+    if (hk.ctrl)  parts.push("Ctrl");
+    if (hk.alt)   parts.push("Alt");
+    if (hk.shift) parts.push("Shift");
+    if (hk.meta)  parts.push("Win");
+    let k = hk.code;
+    if (k.indexOf("Key") === 0) k = k.slice(3);
+    else if (k.indexOf("Digit") === 0) k = k.slice(5);
+    parts.push(k);
+    return parts.join(" + ");
+  }
+
+  function hotkeyMatches(e) {
+    if (!hotkey || !hotkey.code) return false;
+    return e.code === hotkey.code &&
+           e.ctrlKey  === !!hotkey.ctrl &&
+           e.altKey   === !!hotkey.alt &&
+           e.shiftKey === !!hotkey.shift &&
+           e.metaKey  === !!hotkey.meta;
+  }
+
+  function updateHotkeyUI() {
+    hotkeyBtn.textContent = capturingHotkey ? "press a key combo… (Esc cancels)" : hotkeyLabel(hotkey);
+  }
+
   function parseKeyterms(raw) {
     return raw
       .split(/[\\r\\n]+/)
@@ -849,6 +896,7 @@ right lower quadrant"></textarea>
       minSpeech:      minSpeechEl.value,
       appendWindow:   appendWindowEl.value,
       advancedOpen:   Boolean(advancedEl && advancedEl.open),
+      hotkey:         hotkey,
       historyVisible: historyVisible,
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
@@ -885,6 +933,15 @@ right lower quadrant"></textarea>
       if (s.minSpeech !== undefined) minSpeechEl.value = s.minSpeech;
       if (s.appendWindow !== undefined) appendWindowEl.value = s.appendWindow;
       if (typeof s.advancedOpen === "boolean" && advancedEl) advancedEl.open = s.advancedOpen;
+      if (s.hotkey && typeof s.hotkey.code === "string" && s.hotkey.code) {
+        hotkey = {
+          ctrl:  !!s.hotkey.ctrl,
+          alt:   !!s.hotkey.alt,
+          shift: !!s.hotkey.shift,
+          meta:  !!s.hotkey.meta,
+          code:  s.hotkey.code,
+        };
+      }
       if (typeof s.historyVisible === "boolean") historyVisible = s.historyVisible;
 
       if (saveApiKeyEl.checked) {
@@ -1620,6 +1677,19 @@ right lower quadrant"></textarea>
 
   copyBtn.onclick = () => { if (latestText) copyText(latestText); };
 
+  hotkeyBtn.onclick = () => {
+    capturingHotkey = !capturingHotkey;
+    updateHotkeyUI();
+  };
+
+  hotkeyResetBtn.onclick = () => {
+    hotkey = Object.assign({}, DEFAULT_HOTKEY);
+    capturingHotkey = false;
+    updateHotkeyUI();
+    saveSettingsNow();
+    setStatus("Hotkey reset to " + hotkeyLabel(hotkey) + ".", "ok");
+  };
+
   toggleHistoryBtn.onclick = () => {
     historyVisible = !historyVisible;
     saveSettingsNow();
@@ -1693,7 +1763,27 @@ right lower quadrant"></textarea>
   }
 
   document.addEventListener("keydown", (e) => {
+    // Hotkey capture mode: the next non-modifier keypress becomes the hotkey
+    if (capturingHotkey) {
+      e.preventDefault();
+      if (e.code === "Escape") {
+        capturingHotkey = false;
+        updateHotkeyUI();
+        return;
+      }
+      if (/^(Control|Shift|Alt|Meta)(Left|Right)$/.test(e.code)) return; // wait for the main key
+      hotkey = { ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, meta: e.metaKey, code: e.code };
+      capturingHotkey = false;
+      updateHotkeyUI();
+      hotkeyBtn.blur();
+      saveSettingsNow();
+      setStatus("Push-to-talk hotkey set to " + hotkeyLabel(hotkey) + ".", "ok");
+      return;
+    }
+
     if (e.repeat) return;
+
+    // F13/F14 are the AutoHotkey contract (CapsLock relay) — always active.
     if (e.code === "F13") {
       e.preventDefault();
       if (!recording && !stopping) startRecording();
@@ -1705,6 +1795,40 @@ right lower quadrant"></textarea>
       if (recording || stopRequested) stopRecording();
       return;
     }
+
+    // In-app hotkey (default Ctrl+Space): tap toggles, hold is push-to-talk.
+    if (hotkeyMatches(e)) {
+      const t = e.target;
+      const inField = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      // An unmodified key (e.g. plain Space) must stay typable in form fields
+      if (inField && !(hotkey.ctrl || hotkey.alt || hotkey.meta)) return;
+      e.preventDefault();
+      if (!recording && !stopping) {
+        hotkeyEngaged = true;
+        hotkeyDownAt = Date.now();
+        startRecording();
+      } else if (stopping) {
+        hotkeyEngaged = true;
+        hotkeyDownAt = Date.now();
+        pendingStart = true; // tap while finalizing queues the next dictation
+      } else {
+        hotkeyEngaged = false; // second tap: toggle off
+        hotkeyDownAt = 0;
+        stopRecording();
+      }
+      return;
+    }
+  });
+
+  document.addEventListener("keyup", (e) => {
+    if (capturingHotkey || !hotkey || !hotkey.code || e.code !== hotkey.code) return;
+    if (!hotkeyEngaged) return;
+    hotkeyEngaged = false;
+    const held = hotkeyDownAt && Date.now() - hotkeyDownAt > HOTKEY_TAP_MS;
+    hotkeyDownAt = 0;
+    if (!held) return; // quick tap: keep recording, next tap stops
+    if (stopping) { pendingStart = false; return; } // held through a finalize: don't auto-restart
+    stopRecording();
   });
 
   window.addEventListener("beforeunload", () => {
@@ -1742,6 +1866,7 @@ right lower quadrant"></textarea>
   loadSettings();
   updateGateLabels();
   updateKeytermHint();
+  updateHotkeyUI();
   renderHistory();
   updateAppendChip();
   tryWarmOnLoad();
