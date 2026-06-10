@@ -137,6 +137,8 @@ s1.open();
 await sleep(30);
 check('pre-roll + buffered frames flushed on open', s1.sent.length === 7, s1.sent.length);
 check('status shows live', status().includes('transcribing live'), status());
+s1.msg({ message_type: 'session_started', session_id: 'sess-1', config: { keyterms: ['tachycardia', 'ascites'], no_verbatim: true } });
+check('session_started surfaces server-confirmed keyterms', status().includes('(2 keyterms active)'), status());
 check('link pill LIVE', doc.getElementById('linkPill').textContent === 'LIVE');
 check('mic pill REC', doc.getElementById('micPill').textContent === 'REC');
 s1.msg({ message_type: 'partial_transcript', text: 'patient presents' });
@@ -163,6 +165,9 @@ check('success status', status().includes('Done!'), status());
 check('clipboard holds full text', clipboard.includes('Patient presents with ascites.') && clipboard.includes('Last words intact.'), JSON.stringify(clipboard));
 check('no ellipses reach the clipboard', !clipboard.includes('...') && !clipboard.includes('…'), JSON.stringify(clipboard));
 check('append chip visible + appending', doc.getElementById('appendChip').textContent.includes('append'), doc.getElementById('appendChip').textContent);
+const frames1 = s1.sent.map((d) => JSON.parse(d));
+check('every frame carries sample_rate 16000 + boolean commit', frames1.every((f) => f.sample_rate === 16000 && typeof f.commit === 'boolean'), frames1.length + ' frames');
+check('fresh note sends no previous_text', frames1.every((f) => !('previous_text' in f)));
 
 // ===== Scenario 2: append within window, then unexpected mid-dictation disconnect =====
 console.log('--- scenario 2: unexpected disconnect ---');
@@ -171,8 +176,14 @@ await sleep(80);
 const s2 = sockets[1];
 s2.open();
 await sleep(30);
+pump(2); // speak: frames should now carry the append context on the first one only
+const f2 = s2.sent.map((d) => JSON.parse(d));
+check('append session: first frame carries previous_text tail', f2.length >= 2 && typeof f2[0].previous_text === 'string' && f2[0].previous_text.endsWith('Last words intact.'), JSON.stringify(f2[0] && f2[0].previous_text));
+check('previous_text only on the first frame', f2.slice(1).every((f) => !('previous_text' in f)));
 s2.msg({ message_type: 'committed_transcript', text: 'More findings.' });
 check('append mode kept earlier text', latest().includes('Last words intact.') && latest().includes('More findings.'), latest());
+s2.msg({ message_type: 'auth_error', error: 'invalid key' });
+check('non-generic error frame surfaces loudly', statusCls().includes('err') && status().includes('auth_error: invalid key'), status());
 s2.serverClose(); // dies mid-dictation, no user stop
 await sleep(100);
 check('unexpected close -> error status', statusCls().includes('err') && status().includes('Connection lost'), status());

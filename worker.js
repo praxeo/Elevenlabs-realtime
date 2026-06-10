@@ -616,8 +616,10 @@ right lower quadrant"></textarea>
   let userStopped = false;     // distinguishes clean PTT-release from unexpected disconnect
   let stopPhase = null;        // null | "tail" | "awaitFinal"
   let pendingStart = false;    // F13 pressed while previous session was finalizing
-  let pendingChunks = [];      // audio captured while the WebSocket is still connecting
+  let pendingChunks = [];      // base64 audio captured while the WebSocket is still connecting
   let prerollFrames = [];      // ring of raw idle frames; prepended at start so the first word survives
+  let sessionPreviousText = ""; // tail of the note being appended to; rides the first chunk as context
+  let firstChunkSent = false;  // previous_text may only accompany the FIRST chunk of a socket
   let lastWsError = "";
   let wsOpenAt = 0;
   let recStartedAt = 0;
@@ -1191,16 +1193,12 @@ right lower quadrant"></textarea>
       const downsampled = downsampleBuffer(floatSamples, audioCtx.sampleRate, 16000);
       const pcmBuffer = floatTo16BitPCM(downsampled);
       const base64Audio = arrayBufferToBase64(pcmBuffer);
-      const payload = JSON.stringify({
-        message_type: "input_audio_chunk",
-        audio_base_64: base64Audio
-      });
 
       if (ws.readyState === WebSocket.OPEN) {
         flushPendingChunks();
-        try { ws.send(payload); } catch (err) {}
+        sendAudioChunk(base64Audio, false);
       } else if (ws.readyState === WebSocket.CONNECTING && pendingChunks.length < PENDING_CHUNK_CAP) {
-        pendingChunks.push(payload);
+        pendingChunks.push(base64Audio);
       }
     };
 
@@ -1307,11 +1305,29 @@ right lower quadrant"></textarea>
     if (quietTimer)         { clearTimeout(quietTimer);         quietTimer = null; }
   }
 
+  // Single chokepoint for every audio frame: guarantees the spec-required
+  // commit/sample_rate fields and that previous_text rides only the first chunk.
+  function sendAudioChunk(base64, commit) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+    const msg = {
+      message_type: "input_audio_chunk",
+      audio_base_64: base64,
+      commit: !!commit,
+      sample_rate: 16000
+    };
+    if (!firstChunkSent && sessionPreviousText) {
+      msg.previous_text = sessionPreviousText;
+    }
+    try { ws.send(JSON.stringify(msg)); } catch (e) { return false; }
+    firstChunkSent = true;
+    return true;
+  }
+
   function flushPendingChunks() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     while (pendingChunks.length) {
-      const chunk = pendingChunks.shift();
-      try { ws.send(chunk); } catch (e) { break; }
+      if (!sendAudioChunk(pendingChunks[0], false)) break;
+      pendingChunks.shift();
     }
   }
 
@@ -1323,10 +1339,7 @@ right lower quadrant"></textarea>
     for (const f of prerollFrames) {
       if (f.t <= minT) continue;
       const downsampled = downsampleBuffer(f.samples, f.rate, 16000);
-      out.push(JSON.stringify({
-        message_type: "input_audio_chunk",
-        audio_base_64: arrayBufferToBase64(floatTo16BitPCM(downsampled))
-      }));
+      out.push(arrayBufferToBase64(floatTo16BitPCM(downsampled)));
     }
     prerollFrames = [];
     return out;
@@ -1376,6 +1389,7 @@ right lower quadrant"></textarea>
     userStopped = false;
     stopPhase = null;
     pendingChunks = buildPrerollChunks(); // first-word rescue: lead with the pre-roll
+    firstChunkSent = false;
     lastWsError = "";
     wsOpenAt = 0;
     recStartedAt = Date.now();
@@ -1399,6 +1413,11 @@ right lower quadrant"></textarea>
     }
     currentPartial = "";
     updateLiveDisplay();
+
+    // When continuing a note, hand the model the tail of the existing text as
+    // context (rides only the first chunk). Fresh notes send nothing — stale
+    // context would mislead the model.
+    sessionPreviousText = latestText && latestText.trim() ? latestText.trim().slice(-300) : "";
 
     // Establish Secure Proxy WebSocket Connection through the Cloudflare Worker
     const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -1463,7 +1482,15 @@ right lower quadrant"></textarea>
         const data = JSON.parse(event.data);
         const m_type = data.message_type;
 
-        if (m_type === "partial_transcript") {
+        if (m_type === "session_started") {
+          // Server echoes the applied config — surface proof that keyterms took.
+          const cfg = data.config || {};
+          const kt = Array.isArray(cfg.keyterms) ? cfg.keyterms.length : 0;
+          if (!stopping) {
+            setStatus("Listening — transcribing live…" + (kt > 0 ? " (" + kt + " keyterms active)" : ""), "ok");
+          }
+        }
+        else if (m_type === "partial_transcript") {
           partialCount++;
           currentPartial = data.text;
           updateLiveDisplay();
@@ -1487,10 +1514,15 @@ right lower quadrant"></textarea>
             }, COMMIT_QUIET_MS);
           }
         }
-        else if (m_type === "error") {
-          console.error("ElevenLabs Session Error:", data.error);
-          lastWsError = String(data.error || "unknown service error");
-          setStatus("ElevenLabs returned error: " + lastWsError, "err");
+        else if (typeof data.error === "string" && data.error) {
+          // Covers the whole error-frame family: error, auth_error,
+          // quota_exceeded, rate_limited, commit_throttled, input_error,
+          // session_time_limit_exceeded, chunk_size_exceeded, … — any frame
+          // carrying an error string takes the loud path.
+          const tag = (m_type && m_type !== "error") ? (m_type + ": ") : "";
+          lastWsError = tag + data.error;
+          console.error("Scribe error frame:", lastWsError);
+          setStatus("Transcription service error — " + lastWsError, "err");
           failBeep();
         }
       } catch (err) {
@@ -1580,14 +1612,8 @@ right lower quadrant"></textarea>
 
     if (ws && ws.readyState === WebSocket.OPEN) {
       flushPendingChunks();
-      try {
-        // Final empty chunk with commit: true forces the last segment out
-        ws.send(JSON.stringify({
-          message_type: "input_audio_chunk",
-          audio_base_64: "",
-          commit: true
-        }));
-      } catch (e) {}
+      // Final empty chunk with commit: true forces the last segment out
+      sendAudioChunk("", true);
       if (finalDeadlineTimer) clearTimeout(finalDeadlineTimer);
       finalDeadlineTimer = setTimeout(() => {
         finalDeadlineTimer = null;

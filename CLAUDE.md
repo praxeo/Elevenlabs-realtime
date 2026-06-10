@@ -65,8 +65,8 @@ idle
 
 - Backend: `wss api.elevenlabs.io/v1/speech-to-text/realtime` via Worker `fetch` with `Upgrade: websocket` + `xi-api-key`.
 - Query params: `model_id=scribe_v2_realtime`, `audio_format=pcm_16000`, `language_code=en`, `commit_strategy=vad`, `no_verbatim`, `include_timestamps`, optional `vad_silence_threshold_secs` / `vad_threshold` / `min_speech_duration_ms`, repeated `keyterms` (≤ 50, ≤ 20 chars, ≤ 5 words, sanitized in the Worker).
-- Client → server frames: `{"message_type":"input_audio_chunk","audio_base_64":"…"}`, final flush adds `"commit":true`.
-- Server → client frames: `partial_transcript`, `committed_transcript`, `committed_transcript_with_timestamps`, `error`. The Worker synthesizes an `error` frame then closes `1008` on handshake failures, so the client surfaces upstream errors through the same path.
+- Client → server frames: every chunk goes through the `sendAudioChunk` chokepoint, which guarantees the spec-required fields: `{"message_type":"input_audio_chunk","audio_base_64":"…","commit":false,"sample_rate":16000}`; the final flush sets `commit:true`. `previous_text` (append-continuation context, tail of the current note) may ride **only the first** chunk of a socket — the server errors if it appears later; keep that property when touching the send paths.
+- Server → client frames: `session_started` (echoes the applied config incl. `keyterms` — surfaced in the status line as "(N keyterms active)"), `partial_transcript`, `committed_transcript`, `committed_transcript_with_timestamps`, plus a family of error frames (`error`, `auth_error`, `quota_exceeded`, `rate_limited`, `commit_throttled`, `session_time_limit_exceeded`, `input_error`, `chunk_size_exceeded`, `insufficient_audio_activity`, `transcriber_error`, …). Client rule: **any frame carrying a string `error` takes the loud error path** — never match error types by name only. The Worker synthesizes an `error` frame then closes `1008` on handshake failures, so upstream errors surface through the same path.
 - Audio pipeline: 48 kHz float (ScriptProcessor, 4096 samples ≈ 85 ms/frame) → averaged downsample to 16 kHz → s16le → base64.
 
 ## Validation (no browser needed)

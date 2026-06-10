@@ -127,7 +127,7 @@ Keep the dictation tab/window focused until the success beep if you rely on auto
 | Setting | Default | When to change |
 |---|---|---|
 | **Push-to-talk hotkey** | Ctrl + Space | Rebind to anything (click the field, press a combo). Tap toggles; holds longer than ~400 ms behave as press-and-hold. F13/F14 stay active regardless. |
-| **Keyterms** | — | Curate per specialty: drug names, anatomy, eponyms, colleague names. ≤ 50 terms, ≤ 20 chars, ≤ 5 words each. Adds ~20 % to cost. The single biggest accuracy lever available. |
+| **Keyterms** | — | Curate per specialty: drug names, anatomy, eponyms, colleague names. ≤ 50 terms, ≤ 20 chars, ≤ 5 words each. Adds ~20 % to cost. The single biggest accuracy lever available. The status line shows "(N keyterms active)" per session — that count is echoed back by the server, so it's proof they applied. |
 | **Append window** | 45 s | Shorten if stale text keeps riding along into new notes; lengthen (or 0 = always) if you dictate long notes with long thinking pauses. |
 | **Remove ellipses** | on | Scribe writes dictation pauses as "…"/"..." — this strips them (and tightens any orphaned space before punctuation). Turn off only if you genuinely dictate ellipses. |
 | **Scribe pause limit** (`vad_silence_threshold_secs`) | 2.0 s | Raise if segments finalize mid-sentence and grammar suffers; lower for snappier commits on short utterances. |
@@ -181,6 +181,8 @@ The biggest risk in dictation is speaking a long passage into a dead pipeline an
 
 The mental model: **the clipboard always equals the current note.** Appending recopies the whole note, so a paste at any point yields everything dictated so far; pasting replaces, so nothing is double-entered.
 
+When a dictation continues a note, the tail of the existing text is also sent to Scribe as context (`previous_text` on the first audio chunk), so capitalization, punctuation, and terminology stay consistent across push-to-talk presses. Fresh notes send no context.
+
 ## Roadmap
 
 ### Landed — realtime hardening
@@ -196,6 +198,7 @@ The mental model: **the clipboard always equals the current note.** Appending re
 - [x] Advanced section for developer-ish sliders; mic/link status pills
 - [x] ~400 ms pre-roll (first-word rescue) prepended at session start
 - [x] Ellipsis (pause-artifact) filter; transcript-first layout with the audio preview tucked away
+- [x] Realtime-spec alignment: server-confirmed keyterm count in the status line (`session_started` echo), the full error-frame taxonomy handled loudly (`auth_error`, `quota_exceeded`, `rate_limited`, …), spec-required `commit`/`sample_rate` on every chunk, and `previous_text` continuation context when appending
 - [x] PWA manifest + icons; `wrangler.toml`; jsdom flow-test harness (`tests/flow.test.mjs`)
 - [x] Queued PTT restart while the previous dictation finalizes
 - [x] Configurable in-app hotkey (default Ctrl + Space, tap-or-hold) for use without AHK
@@ -209,6 +212,8 @@ The mental model: **the clipboard always equals the current note.** Appending re
 
 ### Later / ideas
 
+- [ ] **Direct client-side streaming** — the realtime API accepts single-use tokens (`token` query param, minted via the tokens endpoint); the Worker could become a passphrase-gated token minter and the browser would connect straight to ElevenLabs, dropping the proxy hop from the audio path entirely.
+- [ ] **Zero-retention mode** — `enable_logging=false` puts a session in zero-retention mode (enterprise plans only); worth wiring as an option if PHI policy ever requires it.
 - [ ] **Warm socket** — keep one WebSocket open across dictations for instant start; needs answers on idle billing/session timeout before committing.
 - [ ] **AudioWorklet migration** — `ScriptProcessorNode` is deprecated; works today, but the replacement should land before browsers force the issue.
 - [ ] **Passphrase hardening** — shared-mode passphrase travels as a query parameter; move to a WebSocket subprotocol header or first-message auth to shrink the exposure surface (logs, proxies).
